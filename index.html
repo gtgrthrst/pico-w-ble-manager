@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PicoW 強化版管理員</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; padding: 20px; display: flex; justify-content: center; }
+        .card { background: white; width: 100%; max-width: 400px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); padding: 25px; }
+        .stat-box { text-align: center; padding: 12px; border-radius: 10px; margin-bottom: 20px; background: #eee; font-weight: bold; }
+        .connected { background: #d4edda; color: #155724; }
+        button { width: 100%; padding: 12px; margin: 6px 0; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .btn-blue { background: #007bff; color: white; }
+        .btn-outline { background: white; border: 1.5px solid #007bff; color: #007bff; }
+        .ssid-tag { display: inline-block; background: #e7f3ff; color: #007bff; padding: 6px 12px; border-radius: 20px; margin: 4px; font-size: 13px; cursor: pointer; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        #log { font-family: monospace; font-size: 11px; background: #222; color: #adff2f; padding: 10px; border-radius: 8px; height: 100px; overflow-y: auto; margin-top: 15px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div class="stat-box" id="ble-stat">尚未連線藍牙</div>
+    <button class="btn-blue" onclick="connect()">🔗 1. 連接設備</button>
+    
+    <div id="wifi-msg" style="text-align:center; font-size:13px; color:#666; margin:10px 0;">等待操作...</div>
+    
+    <button class="btn-outline" onclick="send('SCAN')">🔍 2. 掃描 WiFi</button>
+    <div id="wifi-list"></div>
+    
+    <input type="text" id="ssid" placeholder="WiFi 名稱">
+    <input type="password" id="pw" placeholder="WiFi 密碼">
+    <button style="background: #28a745; color: white;" onclick="applyWifi()">📡 3. 設定並連線</button>
+    
+    <div id="log">系統日誌載入中...<br></div>
+</div>
+
+<script>
+    let device, rxChar, txChar;
+    const UART_SERV = '6e400001-b5a3-f393-e0a9-e50e24dcca9e';
+    const UUID_RX = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'; // 網頁寫入
+    const UUID_TX = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'; // 網頁接收
+
+    function log(m) {
+        const el = document.getElementById('log');
+        el.innerHTML += `> ${m}<br>`;
+        el.scrollTop = el.scrollHeight;
+    }
+
+    async function connect() {
+        try {
+            device = await navigator.bluetooth.requestDevice({
+                filters: [{ name: 'PicoW' }], optionalServices: [UART_SERV]
+            });
+            const server = await device.gatt.connect();
+            const service = await server.getPrimaryService(UART_SERV);
+            rxChar = await service.getCharacteristic(UUID_RX);
+            txChar = await service.getCharacteristic(UUID_TX);
+
+            await txChar.startNotifications();
+            txChar.addEventListener('characteristicvaluechanged', (e) => {
+                let val = new TextDecoder().decode(e.target.value);
+                if (val.startsWith("SSIDS:")) renderWiFi(val.slice(6).split(","));
+                else if (val.startsWith("MSG:")) document.getElementById('wifi-msg').innerText = val.slice(4);
+                else if (val.startsWith("SUCCESS:")) {
+                    document.getElementById('wifi-msg').innerText = "✅ 已連網 IP: " + val.slice(8);
+                } else if (val.startsWith("ERR:")) {
+                    document.getElementById('wifi-msg').innerText = "❌ 連線失敗: " + val.slice(4);
+                }
+                log("接收: " + val);
+            });
+
+            document.getElementById('ble-stat').innerText = "✅ 已連接: " + device.name;
+            document.getElementById('ble-stat').classList.add("connected");
+            log("藍牙配對成功");
+        } catch (e) { log("錯誤: " + e); }
+    }
+
+    function renderWiFi(list) {
+        const container = document.getElementById('wifi-list');
+        container.innerHTML = "";
+        list.forEach(name => {
+            if(!name) return;
+            const span = document.createElement('span');
+            span.className = 'ssid-tag';
+            span.innerText = name;
+            span.onclick = () => document.getElementById('ssid').value = name;
+            container.appendChild(span);
+        });
+    }
+
+    // 重點修正：分段發送函式
+    async function send(msg) {
+        if (!rxChar) return alert("請先連線藍牙");
+        const CHUNK_SIZE = 18; 
+        try {
+            for (let i = 0; i < msg.length; i += CHUNK_SIZE) {
+                let chunk = msg.substring(i, i + CHUNK_SIZE);
+                await rxChar.writeValue(new TextEncoder().encode(chunk));
+                log("傳送片段: " + chunk);
+                await new Promise(r => setTimeout(r, 60)); // 延遲避免硬體掉包
+            }
+            await rxChar.writeValue(new TextEncoder().encode("END"));
+            log("指令發送完成");
+        } catch (e) { log("傳送錯誤: " + e); }
+    }
+
+    function applyWifi() {
+        const s = document.getElementById('ssid').value;
+        const p = document.getElementById('pw').value;
+        if (s && p) {
+            document.getElementById('wifi-msg').innerText = "正在傳送 WiFi 資訊...";
+            send(`W:${s},${p}`);
+        } else {
+            alert("請輸入名稱與密碼");
+        }
+    }
+</script>
+</body>
+</html>
