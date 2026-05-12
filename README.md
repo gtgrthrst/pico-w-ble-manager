@@ -36,6 +36,18 @@
 - **接收端 (MicroPython)**：利用 `cmd_buffer` 持續累加片段，直到辨識到結束符號才觸發連線邏輯。
 
 ---
+## 🌐 即時演示 (Live Demo)
+
+本專案已部署於 GitHub Pages，你可以直接開啟以下連結進行 WiFi 配置：
+https://gtgrthrst.github.io/pico-w-ble-manager/
+*(請使用 Chrome 或 Edge 瀏覽器以支援 Web Bluetooth)*
+📱 iPhone / iOS 使用說明
+由於 iOS 上的 Safari、Chrome 和 Firefox 目前皆「不支援」原生 Web Bluetooth API，iPhone 使用者必須透過特定的瀏覽器 App 才能與你的 Pico W 連線。
+1. 下載專用瀏覽器
+請至 App Store 下載以下其中一款支援藍牙功能的瀏覽器：
+Bluefy (最推薦，免費且穩定)
+WebBLE (付費，功能強大)
+
 ## 👤 關於作者
 **阿好伯 (Ah-Bo-Bo)**
 技術部落客 / 專業工程師 / 創客
